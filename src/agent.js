@@ -24,14 +24,14 @@ const CG_KEY_PARAM = CG_TIER === 'pro' ? 'x_cg_pro_api_key' : 'x_cg_demo_api_key
 
 // The macro universe — symbol: Yahoo ticker
 const INSTRUMENTS = [
-  { id: 'spx',    y: '^GSPC',    st: ['^spx'],            fred: 'SP500',        name: 'S&P 500',      group: 'INDICES', fmt: 'idx' },
-  { id: 'ndx',    y: '^IXIC',    st: ['^ndq'],            fred: 'NASDAQCOM',    name: 'Nasdaq',       group: 'INDICES', fmt: 'idx' },
-  { id: 'vix',    y: '^VIX',     st: ['^vix', 'vi.f'],    fred: 'VIXCLS',       name: 'VIX',          group: 'INDICES', fmt: 'idx' },
-  { id: 'dxy',    y: 'DX-Y.NYB', st: ['dx.f'],            fred: 'DTWEXBGS',     name: 'Dollar Index', group: 'FX',      fmt: 'idx' },
+  { id: 'spx',    y: '^GSPC',    st: ['^spx'],            cboe: '_SPX', fred: 'SP500', name: 'S&P 500',      group: 'INDICES', fmt: 'idx' },
+  { id: 'ndx',    y: '^IXIC',    st: ['^ndq'],            cboe: '_NDX', fred: 'NASDAQCOM', name: 'Nasdaq 100',       group: 'INDICES', fmt: 'idx' },
+  { id: 'vix',    y: '^VIX',     st: ['^vix', 'vi.f'],    cboe: '_VIX', fred: 'VIXCLS', name: 'VIX',          group: 'INDICES', fmt: 'idx' },
+  { id: 'dxy',    y: 'DX-Y.NYB', st: ['dx.f'],            dxyBasket: true, fred: 'DTWEXBGS', name: 'Dollar Index', group: 'FX',      fmt: 'idx' },
   { id: 'eurusd', y: 'EURUSD=X', st: ['eurusd'],          ff: ['EUR', 'USD'],   name: 'EUR/USD',      group: 'FX',      fmt: 'fx'  },
   { id: 'usdjpy', y: 'USDJPY=X', st: ['usdjpy'],          ff: ['USD', 'JPY'],   name: 'USD/JPY',      group: 'FX',      fmt: 'fx'  },
   { id: 'usdtry', y: 'USDTRY=X', st: ['usdtry'],          ff: ['USD', 'TRY'],   name: 'USD/TRY',      group: 'FX',      fmt: 'fx'  },
-  { id: 'us10y',  y: '^TNX',     st: [], fred: 'DGS10',   name: 'US 10Y Yield', group: 'YIELDS',  fmt: 'pct' },
+  { id: 'us10y',  y: '^TNX',     st: [], cboe: '_TNX', fred: 'DGS10', name: 'US 10Y Yield', group: 'YIELDS',  fmt: 'pct' },
   { id: 'gold',   y: 'GC=F',     st: ['xauusd', 'gc.f'],  cg: 'pax-gold',       name: 'Gold (PAXG)',  group: 'COMMODITIES', fmt: 'usd' },
   { id: 'silver', y: 'SI=F',     st: ['xagusd', 'si.f'],  fred: 'PCU2122212122210', name: 'Silver',   group: 'COMMODITIES', fmt: 'usd' },
   { id: 'wti',    y: 'CL=F',     st: ['cl.f'],            fred: 'DCOILWTICO',   name: 'Oil (WTI)',    group: 'COMMODITIES', fmt: 'usd' },
@@ -57,9 +57,13 @@ const state = {
 const UA = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36' };
 
 async function yahooQuote(inst) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(inst.y)}?interval=1d&range=5d`;
-  const res = await fetch(url, { headers: { ...UA, Accept: 'application/json' }, timeout: 12000 });
-  if (!res.ok) throw new Error(`yahoo ${res.status}`);
+  let res = null;
+  for (const host of ['query1', 'query2']) {
+    const url = `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(inst.y)}?interval=1d&range=5d`;
+    res = await fetch(url, { headers: { ...UA, Accept: 'application/json' }, timeout: 12000 });
+    if (res.ok) break;
+  }
+  if (!res?.ok) throw new Error(`yahoo ${res?.status}`);
   const r = (await res.json())?.chart?.result?.[0];
   if (!r?.meta) throw new Error('yahoo empty');
   let price = r.meta.regularMarketPrice;
@@ -98,6 +102,38 @@ async function fredQuote(seriesId) {
   return { price: vals[vals.length - 1], prev: vals[vals.length - 2], source: 'fred' };
 }
 
+async function cboeQuote(sym) {
+  const url = `https://cdn.cboe.com/api/global/delayed_quotes/quotes/${sym}.json`;
+  const res = await fetch(url, { headers: { ...UA, Accept: 'application/json' }, timeout: 12000 });
+  if (!res.ok) throw new Error(`cboe ${res.status}`);
+  const d = (await res.json())?.data;
+  const price = parseFloat(d?.current_price ?? d?.close);
+  const prev = parseFloat(d?.prev_day_close ?? d?.previous_close ?? d?.prev_close);
+  if (!price || !prev) throw new Error('cboe empty');
+  return { price, prev, source: 'cboe' };
+}
+
+// True ICE DXY formula computed from ECB reference rates (Frankfurter)
+async function dxyBasketQuote() {
+  const since = new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10);
+  const url = `https://api.frankfurter.app/${since}..?from=USD&to=EUR,JPY,GBP,CAD,SEK,CHF`;
+  const res = await fetch(url, { headers: { Accept: 'application/json' }, timeout: 12000 });
+  if (!res.ok) throw new Error(`frankfurter ${res.status}`);
+  const j = await res.json();
+  const dates = Object.keys(j.rates || {}).sort();
+  if (dates.length < 2) throw new Error('frankfurter empty');
+  const dxyOf = r => 50.14348112
+    * Math.pow(1 / r.EUR, -0.576)   // EURUSD^-0.576
+    * Math.pow(r.JPY, 0.136)        // USDJPY^0.136
+    * Math.pow(1 / r.GBP, -0.119)   // GBPUSD^-0.119
+    * Math.pow(r.CAD, 0.091)
+    * Math.pow(r.SEK, 0.042)
+    * Math.pow(r.CHF, 0.036);
+  const price = dxyOf(j.rates[dates[dates.length - 1]]);
+  const prev = dxyOf(j.rates[dates[dates.length - 2]]);
+  return { price: +price.toFixed(2), prev: +prev.toFixed(2), source: 'ecb-basket' };
+}
+
 async function cgQuote(id) {
   const url = `${CG_BASE}/simple/price?ids=${id}&vs_currencies=usd&include_24hr_change=true&${CG_KEY_PARAM}=${CG_API_KEY}`;
   const res = await fetch(url, { headers: { Accept: 'application/json' }, timeout: 12000 });
@@ -126,6 +162,9 @@ async function frankfurterQuote(from, to) {
 async function fetchQuote(inst) {
   let q = null, lastErr = null;
   try { q = await yahooQuote(inst); } catch (e) { lastErr = e; }
+  if (!q && inst.cboe) {
+    try { q = await cboeQuote(inst.cboe); } catch (e) { lastErr = e; }
+  }
   if (!q && inst.st) {
     for (const sym of inst.st) {
       try { q = await stooqQuote(sym); break; } catch (e) { lastErr = e; }
@@ -133,6 +172,9 @@ async function fetchQuote(inst) {
   }
   if (!q && inst.cg && CG_API_KEY) {
     try { q = await cgQuote(inst.cg); } catch (e) { lastErr = e; }
+  }
+  if (!q && inst.dxyBasket) {
+    try { q = await dxyBasketQuote(); } catch (e) { lastErr = e; }
   }
   if (!q && inst.ff) {
     try { q = await frankfurterQuote(inst.ff[0], inst.ff[1]); } catch (e) { lastErr = e; }
