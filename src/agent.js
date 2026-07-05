@@ -20,20 +20,20 @@ const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '300000'); // 
 
 // The macro universe — symbol: Yahoo ticker
 const INSTRUMENTS = [
-  { id: 'spx',    y: '^GSPC',    name: 'S&P 500',      group: 'INDICES', fmt: 'idx' },
-  { id: 'ndx',    y: '^IXIC',    name: 'Nasdaq',       group: 'INDICES', fmt: 'idx' },
-  { id: 'vix',    y: '^VIX',     name: 'VIX',          group: 'INDICES', fmt: 'idx' },
-  { id: 'dxy',    y: 'DX-Y.NYB', name: 'Dollar Index', group: 'FX',      fmt: 'idx' },
-  { id: 'eurusd', y: 'EURUSD=X', name: 'EUR/USD',      group: 'FX',      fmt: 'fx'  },
-  { id: 'usdjpy', y: 'USDJPY=X', name: 'USD/JPY',      group: 'FX',      fmt: 'fx'  },
-  { id: 'usdtry', y: 'USDTRY=X', name: 'USD/TRY',      group: 'FX',      fmt: 'fx'  },
-  { id: 'us10y',  y: '^TNX',     name: 'US 10Y Yield', group: 'YIELDS',  fmt: 'pct' },
-  { id: 'gold',   y: 'GC=F',     name: 'Gold',         group: 'COMMODITIES', fmt: 'usd' },
-  { id: 'silver', y: 'SI=F',     name: 'Silver',       group: 'COMMODITIES', fmt: 'usd' },
-  { id: 'wti',    y: 'CL=F',     name: 'Oil (WTI)',    group: 'COMMODITIES', fmt: 'usd' },
-  { id: 'brent',  y: 'BZ=F',     name: 'Oil (Brent)',  group: 'COMMODITIES', fmt: 'usd' },
-  { id: 'natgas', y: 'NG=F',     name: 'Nat Gas',      group: 'COMMODITIES', fmt: 'usd' },
-  { id: 'copper', y: 'HG=F',     name: 'Copper',       group: 'COMMODITIES', fmt: 'usd' },
+  { id: 'spx',    y: '^GSPC',    st: ['^spx'],            name: 'S&P 500',      group: 'INDICES', fmt: 'idx' },
+  { id: 'ndx',    y: '^IXIC',    st: ['^ndq'],            name: 'Nasdaq',       group: 'INDICES', fmt: 'idx' },
+  { id: 'vix',    y: '^VIX',     st: ['^vix', 'vi.f'],    name: 'VIX',          group: 'INDICES', fmt: 'idx' },
+  { id: 'dxy',    y: 'DX-Y.NYB', st: ['dx.f'],            name: 'Dollar Index', group: 'FX',      fmt: 'idx' },
+  { id: 'eurusd', y: 'EURUSD=X', st: ['eurusd'],          name: 'EUR/USD',      group: 'FX',      fmt: 'fx'  },
+  { id: 'usdjpy', y: 'USDJPY=X', st: ['usdjpy'],          name: 'USD/JPY',      group: 'FX',      fmt: 'fx'  },
+  { id: 'usdtry', y: 'USDTRY=X', st: ['usdtry'],          name: 'USD/TRY',      group: 'FX',      fmt: 'fx'  },
+  { id: 'us10y',  y: '^TNX',     st: [], fred: 'DGS10',   name: 'US 10Y Yield', group: 'YIELDS',  fmt: 'pct' },
+  { id: 'gold',   y: 'GC=F',     st: ['xauusd', 'gc.f'],  name: 'Gold',         group: 'COMMODITIES', fmt: 'usd' },
+  { id: 'silver', y: 'SI=F',     st: ['xagusd', 'si.f'],  name: 'Silver',       group: 'COMMODITIES', fmt: 'usd' },
+  { id: 'wti',    y: 'CL=F',     st: ['cl.f'],            name: 'Oil (WTI)',    group: 'COMMODITIES', fmt: 'usd' },
+  { id: 'brent',  y: 'BZ=F',     st: ['cb.f'],            name: 'Oil (Brent)',  group: 'COMMODITIES', fmt: 'usd' },
+  { id: 'natgas', y: 'NG=F',     st: ['ng.f'],            name: 'Nat Gas',      group: 'COMMODITIES', fmt: 'usd' },
+  { id: 'copper', y: 'HG=F',     st: ['hg.f'],            name: 'Copper',       group: 'COMMODITIES', fmt: 'usd' },
 ];
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -49,26 +49,64 @@ const state = {
   errors: [],
 };
 
-// ─── Yahoo fetch (chart endpoint — keyless, needs a browser-like UA) ─────────
-async function fetchQuote(inst) {
+// ─── Multi-source quote fetch: Yahoo → Stooq → FRED ─────────────────────────
+const UA = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36' };
+
+async function yahooQuote(inst) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(inst.y)}?interval=1d&range=5d`;
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36', Accept: 'application/json' },
-    timeout: 15000,
-  });
-  if (!res.ok) throw new Error(`Yahoo ${res.status} ${inst.y}`);
-  const j = await res.json();
-  const r = j?.chart?.result?.[0];
-  if (!r?.meta) throw new Error(`No data ${inst.y}`);
-  const meta = r.meta;
-  let price = meta.regularMarketPrice;
-  let prev = meta.chartPreviousClose ?? meta.previousClose;
-  // Fallback to the daily close series if meta is thin
+  const res = await fetch(url, { headers: { ...UA, Accept: 'application/json' }, timeout: 12000 });
+  if (!res.ok) throw new Error(`yahoo ${res.status}`);
+  const r = (await res.json())?.chart?.result?.[0];
+  if (!r?.meta) throw new Error('yahoo empty');
+  let price = r.meta.regularMarketPrice;
+  let prev = r.meta.chartPreviousClose ?? r.meta.previousClose;
   const closes = (r.indicators?.quote?.[0]?.close || []).filter(x => x != null);
   if (price == null && closes.length) price = closes[closes.length - 1];
   if (prev == null && closes.length > 1) prev = closes[closes.length - 2];
-  if (price == null || prev == null || !prev) throw new Error(`Bad quote ${inst.y}`);
-  // ^TNX sometimes arrives as yield×10 — normalize
+  if (price == null || !prev) throw new Error('yahoo bad quote');
+  return { price: +price, prev: +prev, source: 'yahoo' };
+}
+
+async function stooqQuote(sym) {
+  // Daily history CSV: Date,Open,High,Low,Close(,Volume) — take last two closes
+  const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(sym)}&i=d`;
+  const res = await fetch(url, { headers: { ...UA, Accept: 'text/csv' }, timeout: 12000 });
+  if (!res.ok) throw new Error(`stooq ${res.status}`);
+  const text = await res.text();
+  const lines = text.trim().split('\n').filter(l => l && !l.startsWith('Date'));
+  if (lines.length < 2) throw new Error('stooq empty');
+  const closeOf = l => parseFloat(l.split(',')[4]);
+  const price = closeOf(lines[lines.length - 1]);
+  const prev = closeOf(lines[lines.length - 2]);
+  if (!price || !prev) throw new Error('stooq bad rows');
+  return { price, prev, source: 'stooq' };
+}
+
+async function fredQuote(seriesId) {
+  const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seriesId}`;
+  const res = await fetch(url, { headers: { ...UA, Accept: 'text/csv' }, timeout: 15000 });
+  if (!res.ok) throw new Error(`fred ${res.status}`);
+  const text = await res.text();
+  const vals = text.trim().split('\n').slice(1)
+    .map(l => parseFloat(l.split(',')[1]))
+    .filter(v => !isNaN(v));
+  if (vals.length < 2) throw new Error('fred empty');
+  return { price: vals[vals.length - 1], prev: vals[vals.length - 2], source: 'fred' };
+}
+
+async function fetchQuote(inst) {
+  let q = null, lastErr = null;
+  try { q = await yahooQuote(inst); } catch (e) { lastErr = e; }
+  if (!q && inst.st) {
+    for (const sym of inst.st) {
+      try { q = await stooqQuote(sym); break; } catch (e) { lastErr = e; }
+    }
+  }
+  if (!q && inst.fred) {
+    try { q = await fredQuote(inst.fred); } catch (e) { lastErr = e; }
+  }
+  if (!q) throw lastErr || new Error(`no source for ${inst.id}`);
+  let { price, prev, source } = q;
   if (inst.id === 'us10y' && price > 20) { price /= 10; prev /= 10; }
   return {
     ...inst,
@@ -76,6 +114,7 @@ async function fetchQuote(inst) {
     prevClose: +prev,
     chg1d: +(((price - prev) / prev) * 100).toFixed(2),
     chgAbs: +(price - prev).toFixed(4),
+    source,
     updated: new Date().toISOString(),
   };
 }
