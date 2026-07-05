@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MACRO-01 · Risk Regime</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#04101c;--surface:#0a1c2e;--border:#123852;--dim:#1a4a6a;--muted:#246088;
+  --soft:#3a8ab8;--bright:#78bce0;--white:#aedcf8;--hi:#d6f0ff;
+  --green:#27c97a;--red:#e05050;--amber:#e8a020;--blue:#4a90d9;--sky:#38bdf8;--purple:#a78bfa;
+}
+body{background:var(--bg);color:var(--white);font-family:'SF Mono','Fira Code','Courier New',monospace;font-size:11px;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.titlebar{background:#020a12;border-bottom:1px solid var(--border);padding:9px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.dots{display:flex;gap:6px}.dot{width:12px;height:12px;border-radius:50%}
+.agent-id{color:var(--soft);font-size:10px;letter-spacing:.1em;display:flex;align-items:center;gap:8px;flex:1;margin-left:6px}
+.badge{font-size:9px;padding:2px 8px;border-radius:3px;letter-spacing:.1em;font-weight:700}
+.b-live{background:rgba(39,201,122,.1);border:1px solid rgba(39,201,122,.25);color:var(--green)}
+.b-macro{background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.3);color:var(--sky)}
+.b-warn{background:rgba(232,160,32,.1);border:1px solid rgba(232,160,32,.25);color:var(--amber)}
+#uptime{margin-left:auto;color:var(--muted);font-size:9px}
+.layout{display:grid;grid-template-columns:290px 1fr 250px;flex:1;overflow:hidden;min-height:0}
+.col{display:flex;flex-direction:column;overflow:hidden}
+.col-mid{border-left:1px solid var(--border);border-right:1px solid var(--border)}
+.phdr{background:#020a12;border-bottom:1px solid var(--border);padding:6px 10px;display:flex;align-items:center;gap:6px;color:var(--soft);font-size:9px;letter-spacing:.12em;flex-shrink:0}
+.phdr i{font-size:13px}
+.phdr-pill{margin-left:auto;font-size:8px;padding:1px 6px;border-radius:2px;background:rgba(56,189,248,.12);color:var(--sky);border:1px solid rgba(56,189,248,.25)}
+.scroll{overflow-y:auto;flex:1}
+.scroll::-webkit-scrollbar{width:3px}
+.scroll::-webkit-scrollbar-thumb{background:var(--dim);border-radius:2px}
+.grp{padding:5px 10px;background:#061420;color:var(--muted);font-size:8px;letter-spacing:.15em;border-bottom:1px solid #0a1826}
+.q-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid #061220}
+.q-name{color:var(--hi);font-size:10px;font-weight:700;flex:1}
+.q-price{color:var(--bright);font-size:10px;text-align:right;min-width:76px}
+.q-chg{font-size:9px;min-width:58px;text-align:right}
+.regime-wrap{padding:16px;border-bottom:1px solid var(--border);text-align:center;flex-shrink:0}
+.rg-label{font-size:28px;font-weight:800;letter-spacing:.06em;line-height:1}
+.rg-score{font-size:11px;color:var(--muted);margin-top:6px}
+.rg-comps{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:12px}
+.rg-chip{font-size:8px;padding:2px 7px;border-radius:3px;border:1px solid var(--dim)}
+.chip-pos{background:rgba(39,201,122,.1);color:var(--green);border-color:rgba(39,201,122,.25)}
+.chip-neg{background:rgba(224,80,80,.12);color:var(--red);border-color:rgba(224,80,80,.3)}
+.ev{display:flex;gap:7px;align-items:flex-start;padding:4px 10px;border-bottom:1px solid #040e18;animation:slide .2s ease}
+@keyframes slide{from{opacity:0;transform:translateX(-5px)}to{opacity:1;transform:none}}
+.ev-ts{color:var(--muted);font-size:8px;flex-shrink:0;margin-top:1px;min-width:50px}
+.ev-tag{font-size:8px;padding:1px 5px;border-radius:2px;flex-shrink:0;letter-spacing:.07em;font-weight:700;min-width:56px;text-align:center}
+.ev-body{color:var(--bright);font-size:9px;line-height:1.5;flex:1;word-break:break-word}
+.ev-body b{color:var(--hi)}
+.t-quote{background:rgba(56,189,248,.12);color:var(--sky);border:1px solid rgba(56,189,248,.25)}
+.t-regime{background:rgba(167,139,250,.12);color:var(--purple);border:1px solid rgba(167,139,250,.25)}
+.t-alert{background:rgba(224,80,80,.15);color:var(--red);border:1px solid rgba(224,80,80,.3)}
+.t-sys{background:rgba(36,96,136,.3);color:var(--soft);border:1px solid var(--dim)}
+.alert-card{margin:7px;border:1px solid rgba(232,160,32,.3);border-radius:6px;padding:8px 10px}
+.ac-type{font-size:9px;font-weight:800;color:var(--amber)}
+.ac-body{font-size:8px;color:var(--soft);margin-top:4px;line-height:1.6}
+.scan-btn{margin:10px;padding:9px;border:1px solid rgba(56,189,248,.4);background:rgba(56,189,248,.1);color:var(--sky);border-radius:5px;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:all .15s}
+.scan-btn:hover{background:rgba(56,189,248,.2)}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--border);flex-shrink:0}
+.stat-item{padding:7px 10px;border-right:1px solid var(--border);text-align:center}
+.stat-item:last-child{border-right:none}
+.stat-num{color:var(--hi);font-size:14px;font-weight:700}
+.stat-lbl{color:var(--muted);font-size:8px;margin-top:2px}
+.bottombar{background:#020a12;border-top:1px solid var(--border);padding:6px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.bb{font-size:9px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.bb b{color:var(--soft)}.bb-sep{color:var(--dim)}
+.pulse{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.empty{padding:20px;text-align:center;color:var(--muted);font-size:10px;line-height:1.8}
+.up{color:var(--green)}.dn{color:var(--red)}
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div class="dots"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div></div>
+  <div class="agent-id">
+    <span style="color:var(--soft)">agent://</span><span style="color:var(--sky)">MACRO-01</span>
+    <span style="color:var(--dim)">—</span>
+    <span style="color:var(--muted)">TradFi & Risk Regime · Indices · FX · Yields · Commodities</span>
+    <span class="badge b-live" id="main-badge">CONNECTING</span>
+    <span class="badge b-macro">THE WEATHER STATION</span>
+  </div>
+  <span id="uptime">UP: 00:00:00</span>
+</div>
+
+<div class="layout">
+  <div class="col">
+    <div class="phdr"><i class="ti ti-world"></i> MACRO BOARD <span class="phdr-pill" id="q-count">0</span></div>
+    <div class="scroll" id="q-list"><div class="empty"><span class="pulse" style="margin-right:6px"></span>First macro cycle running...</div></div>
+  </div>
+
+  <div class="col col-mid">
+    <div class="regime-wrap">
+      <div style="font-size:9px;color:var(--muted);letter-spacing:.15em;margin-bottom:10px">GLOBAL RISK REGIME</div>
+      <div class="rg-label" id="rg-label" style="color:var(--muted)">—</div>
+      <div class="rg-score" id="rg-score">awaiting data</div>
+      <div class="rg-comps" id="rg-comps"></div>
+    </div>
+    <div class="phdr"><i class="ti ti-satellite"></i> MACRO EVENT BUS <span class="phdr-pill" id="ev-count">0 events</span></div>
+    <div class="scroll" id="event-stream"><div class="empty">Connecting...</div></div>
+    <div class="stats-row">
+      <div class="stat-item"><div class="stat-num" id="st-cycles">0</div><div class="stat-lbl">cycles</div></div>
+      <div class="stat-item"><div class="stat-num" id="st-alerts">0</div><div class="stat-lbl">alerts</div></div>
+      <div class="stat-item"><div class="stat-num" id="st-inst">0</div><div class="stat-lbl">instruments</div></div>
+      <div class="stat-item"><div class="stat-num" id="st-gecko" style="color:var(--red)">OFF</div><div class="stat-lbl">network link</div></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="phdr"><i class="ti ti-alert-triangle"></i> MACRO ALERTS</div>
+    <div class="scroll" id="alert-list"><div class="empty">VIX spikes, dollar breakouts, oil shocks and regime shifts appear here</div></div>
+    <button class="scan-btn" onclick="scanNow()"><i class="ti ti-refresh"></i> REFRESH NOW</button>
+  </div>
+</div>
+
+<div class="bottombar">
+  <div class="bb"><span class="pulse" id="bb-pulse"></span> <b id="bb-status">CONNECTING</b></div>
+  <span class="bb-sep">|</span>
+  <div class="bb">REGIME <b id="bb-regime">—</b></div>
+  <span class="bb-sep">|</span>
+  <div class="bb">VIX <b id="bb-vix">—</b></div>
+  <span class="bb-sep">|</span>
+  <div class="bb">GECKO <b id="bb-gecko" style="color:var(--red)">OFFLINE</b></div>
+  <span class="bb-sep">|</span>
+  <div class="bb" style="margin-left:auto">MACRO-01 v1.0.0 · Railway</div>
+</div>
+
+<script>
+let ws=null, quotes={}, evTotal=0, alertTotal=0, cycleTotal=0, uptimeSec=0;
+const GROUPS=['INDICES','FX','YIELDS','COMMODITIES'];
+
+function ts(){return new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function fmtPrice(q){
+  if(q.fmt==='pct')return q.price.toFixed(2)+'%';
+  if(q.fmt==='fx')return q.price.toFixed(4);
+  if(q.fmt==='usd')return '$'+(q.price>=100?q.price.toFixed(1):q.price.toFixed(2));
+  return q.price>=1000?Math.round(q.price).toLocaleString():q.price.toFixed(2);
+}
+function fmtP(n){return (n>=0?'+':'')+Number(n).toFixed(2)+'%'}
+function regimeColor(l){return l==='RISK_ON'?'var(--green)':l==='RISK_OFF'?'var(--red)':l==='NEUTRAL'?'var(--amber)':'var(--muted)'}
+
+function pushEvent(type,tagClass,body){
+  const s=document.getElementById('event-stream');
+  if(s.children.length===1&&s.children[0].className==='empty')s.innerHTML='';
+  const d=document.createElement('div');d.className='ev';
+  d.innerHTML=`<span class="ev-ts">${ts()}</span><span class="ev-tag ${tagClass}">${type}</span><span class="ev-body">${body}</span>`;
+  s.insertBefore(d,s.firstChild);
+  if(s.children.length>70)s.removeChild(s.lastChild);
+  evTotal++;document.getElementById('ev-count').textContent=evTotal+' events';
+}
+
+function renderQuotes(){
+  const el=document.getElementById('q-list');
+  const list=Object.values(quotes);
+  if(!list.length)return;
+  el.innerHTML='';
+  GROUPS.forEach(g=>{
+    const items=list.filter(q=>q.group===g);
+    if(!items.length)return;
+    const gh=document.createElement('div');gh.className='grp';gh.textContent=g;el.appendChild(gh);
+    items.forEach(q=>{
+      const row=document.createElement('div');row.className='q-row';
+      row.innerHTML=`<span class="q-name">${q.name}</span><span class="q-price">${fmtPrice(q)}</span><span class="q-chg ${q.chg1d>=0?'up':'dn'}">${fmtP(q.chg1d)}</span>`;
+      el.appendChild(row);
+    });
+  });
+  document.getElementById('q-count').textContent=list.length+' live';
+  document.getElementById('st-inst').textContent=list.length;
+  if(quotes.vix){document.getElementById('bb-vix').textContent=quotes.vix.price.toFixed(1);
+    document.getElementById('bb-vix').style.color=quotes.vix.price>=25?'var(--red)':quotes.vix.price>=20?'var(--amber)':'var(--green)';}
+}
+
+function updateRegime(r){
+  if(!r||r.label==='UNKNOWN')return;
+  const lb=document.getElementById('rg-label');
+  lb.textContent=r.label.replace('_',' ');lb.style.color=regimeColor(r.label);
+  document.getElementById('rg-score').textContent='score '+(r.score>=0?'+':'')+r.score+' · '+new Date(r.updated).toLocaleTimeString('en-US',{hour12:false});
+  document.getElementById('rg-comps').innerHTML=(r.components||[]).map(c=>`<span class="rg-chip ${c.pts>0?'chip-pos':'chip-neg'}">${c.name} ${c.pts>0?'+':''}${c.pts}${c.detail?' · '+c.detail:''}</span>`).join('');
+  const bb=document.getElementById('bb-regime');
+  bb.textContent=r.label.replace('_',' ');bb.style.color=regimeColor(r.label);
+}
+
+function addAlert(d){
+  const el=document.getElementById('alert-list');
+  if(el.children.length===1&&el.children[0].className==='empty')el.innerHTML='';
+  const c=document.createElement('div');c.className='alert-card';
+  c.innerHTML=`<div class="ac-type">${d.type}</div>
+    <div class="ac-body"><b style="color:var(--hi)">${d.asset}</b> — ${d.message}<br><span style="color:var(--sky)">${d.recommendation||''}</span></div>`;
+  el.insertBefore(c,el.firstChild);
+  if(el.children.length>25)el.removeChild(el.lastChild);
+}
+
+function scanNow(){if(ws?.readyState===1)ws.send(JSON.stringify({type:'SCAN'}));}
+function setGecko(on){
+  document.getElementById('bb-gecko').textContent=on?'LIVE':'OFFLINE';
+  document.getElementById('bb-gecko').style.color=on?'var(--green)':'var(--red)';
+  document.getElementById('st-gecko').textContent=on?'ON':'OFF';
+  document.getElementById('st-gecko').style.color=on?'var(--green)':'var(--red)';
+}
+
+function handleEvent(ev){
+  const d=ev.data;
+  switch(ev.topic){
+    case 'macro.handshake':
+      setStatus('LIVE','var(--green)');setGecko(d.geckoConnected);
+      if(d.quotes){quotes=d.quotes;renderQuotes();}
+      if(d.regime)updateRegime(d.regime);
+      if(d.stats){cycleTotal=d.stats.cycles||0;alertTotal=d.stats.alerts||0;
+        document.getElementById('st-cycles').textContent=cycleTotal;
+        document.getElementById('st-alerts').textContent=alertTotal;}
+      pushEvent('SYS','t-sys','Connected to <b>MACRO-01</b> weather station');
+      break;
+    case 'macro.quote':
+      quotes[d.id]=d;renderQuotes();
+      pushEvent('QUOTE','t-quote',`<b>${d.name}</b> ${fmtPrice(d)} <span class="${d.chg1d>=0?'up':'dn'}">${fmtP(d.chg1d)}</span>`);
+      break;
+    case 'macro.regime':
+      updateRegime(d);
+      pushEvent('REGIME','t-regime',`Regime <b style="color:${regimeColor(d.label)}">${d.label.replace('_',' ')}</b> · score ${d.score>=0?'+':''}${d.score}`);
+      break;
+    case 'macro.alert':
+      alertTotal++;document.getElementById('st-alerts').textContent=alertTotal;
+      addAlert(d);
+      pushEvent('ALERT','t-alert',`<b>${d.asset}</b> ${d.type} — ${d.message}`);
+      break;
+    case 'macro.cycle.start':pushEvent('SYS','t-sys',`Cycle #${d.cycle} — ${d.instruments} instruments`);break;
+    case 'macro.cycle.complete':
+      cycleTotal=d.cycle;document.getElementById('st-cycles').textContent=cycleTotal;
+      pushEvent('SYS','t-sys',`Cycle #${d.cycle} — <b>${d.ok}</b> ok · ${d.failed} failed · regime <b>${(d.regime||'').replace('_',' ')}</b> (${d.score>=0?'+':''}${d.score})`);
+      break;
+    case 'macro.gecko.connected':setGecko(true);break;
+    case 'macro.gecko.disconnected':setGecko(false);break;
+  }
+}
+
+function setStatus(txt,col){
+  const b=document.getElementById('main-badge');
+  b.textContent=txt;b.className='badge '+(txt==='LIVE'?'b-live':'b-warn');
+  document.getElementById('bb-status').textContent=txt;
+  document.getElementById('bb-pulse').style.background=col;
+}
+
+function connect(){
+  const proto=location.protocol==='https:'?'wss':'ws';
+  ws=new WebSocket(`${proto}://${location.host}/?agent=DASHBOARD`);
+  ws.onopen=()=>setStatus('LIVE','var(--green)');
+  ws.onmessage=e=>{try{handleEvent(JSON.parse(e.data));}catch(err){}};
+  ws.onclose=()=>{setStatus('RECONNECTING','var(--amber)');setTimeout(connect,4000);};
+  ws.onerror=()=>setStatus('ERROR','var(--red)');
+  setInterval(()=>{if(ws?.readyState===1)ws.send(JSON.stringify({type:'PING'}));},20000);
+}
+
+setInterval(()=>{
+  uptimeSec++;
+  const h=Math.floor(uptimeSec/3600).toString().padStart(2,'0');
+  const m=Math.floor((uptimeSec%3600)/60).toString().padStart(2,'0');
+  const s=(uptimeSec%60).toString().padStart(2,'0');
+  document.getElementById('uptime').textContent=`UP: ${h}:${m}:${s}`;
+},1000);
+
+connect();
+</script>
+</body>
+</html>
