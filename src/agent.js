@@ -17,23 +17,27 @@ const path = require('path');
 const PORT = process.env.PORT || 3009;
 const GECKO_URL = process.env.GECKO_URL || 'wss://gecko-01-agent-production.up.railway.app/?agent=MACRO-01';
 const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '300000'); // 5 min
+const CG_API_KEY = process.env.CG_API_KEY || '';
+const CG_TIER = (process.env.CG_TIER || 'demo').toLowerCase();
+const CG_BASE = CG_TIER === 'pro' ? 'https://pro-api.coingecko.com/api/v3' : 'https://api.coingecko.com/api/v3';
+const CG_KEY_PARAM = CG_TIER === 'pro' ? 'x_cg_pro_api_key' : 'x_cg_demo_api_key';
 
 // The macro universe — symbol: Yahoo ticker
 const INSTRUMENTS = [
-  { id: 'spx',    y: '^GSPC',    st: ['^spx'],            name: 'S&P 500',      group: 'INDICES', fmt: 'idx' },
-  { id: 'ndx',    y: '^IXIC',    st: ['^ndq'],            name: 'Nasdaq',       group: 'INDICES', fmt: 'idx' },
-  { id: 'vix',    y: '^VIX',     st: ['^vix', 'vi.f'],    name: 'VIX',          group: 'INDICES', fmt: 'idx' },
-  { id: 'dxy',    y: 'DX-Y.NYB', st: ['dx.f'],            name: 'Dollar Index', group: 'FX',      fmt: 'idx' },
-  { id: 'eurusd', y: 'EURUSD=X', st: ['eurusd'],          name: 'EUR/USD',      group: 'FX',      fmt: 'fx'  },
-  { id: 'usdjpy', y: 'USDJPY=X', st: ['usdjpy'],          name: 'USD/JPY',      group: 'FX',      fmt: 'fx'  },
-  { id: 'usdtry', y: 'USDTRY=X', st: ['usdtry'],          name: 'USD/TRY',      group: 'FX',      fmt: 'fx'  },
+  { id: 'spx',    y: '^GSPC',    st: ['^spx'],            fred: 'SP500',        name: 'S&P 500',      group: 'INDICES', fmt: 'idx' },
+  { id: 'ndx',    y: '^IXIC',    st: ['^ndq'],            fred: 'NASDAQCOM',    name: 'Nasdaq',       group: 'INDICES', fmt: 'idx' },
+  { id: 'vix',    y: '^VIX',     st: ['^vix', 'vi.f'],    fred: 'VIXCLS',       name: 'VIX',          group: 'INDICES', fmt: 'idx' },
+  { id: 'dxy',    y: 'DX-Y.NYB', st: ['dx.f'],            fred: 'DTWEXBGS',     name: 'Dollar Index', group: 'FX',      fmt: 'idx' },
+  { id: 'eurusd', y: 'EURUSD=X', st: ['eurusd'],          ff: ['EUR', 'USD'],   name: 'EUR/USD',      group: 'FX',      fmt: 'fx'  },
+  { id: 'usdjpy', y: 'USDJPY=X', st: ['usdjpy'],          ff: ['USD', 'JPY'],   name: 'USD/JPY',      group: 'FX',      fmt: 'fx'  },
+  { id: 'usdtry', y: 'USDTRY=X', st: ['usdtry'],          ff: ['USD', 'TRY'],   name: 'USD/TRY',      group: 'FX',      fmt: 'fx'  },
   { id: 'us10y',  y: '^TNX',     st: [], fred: 'DGS10',   name: 'US 10Y Yield', group: 'YIELDS',  fmt: 'pct' },
-  { id: 'gold',   y: 'GC=F',     st: ['xauusd', 'gc.f'],  name: 'Gold',         group: 'COMMODITIES', fmt: 'usd' },
-  { id: 'silver', y: 'SI=F',     st: ['xagusd', 'si.f'],  name: 'Silver',       group: 'COMMODITIES', fmt: 'usd' },
-  { id: 'wti',    y: 'CL=F',     st: ['cl.f'],            name: 'Oil (WTI)',    group: 'COMMODITIES', fmt: 'usd' },
-  { id: 'brent',  y: 'BZ=F',     st: ['cb.f'],            name: 'Oil (Brent)',  group: 'COMMODITIES', fmt: 'usd' },
-  { id: 'natgas', y: 'NG=F',     st: ['ng.f'],            name: 'Nat Gas',      group: 'COMMODITIES', fmt: 'usd' },
-  { id: 'copper', y: 'HG=F',     st: ['hg.f'],            name: 'Copper',       group: 'COMMODITIES', fmt: 'usd' },
+  { id: 'gold',   y: 'GC=F',     st: ['xauusd', 'gc.f'],  cg: 'pax-gold',       name: 'Gold (PAXG)',  group: 'COMMODITIES', fmt: 'usd' },
+  { id: 'silver', y: 'SI=F',     st: ['xagusd', 'si.f'],  fred: 'PCU2122212122210', name: 'Silver',   group: 'COMMODITIES', fmt: 'usd' },
+  { id: 'wti',    y: 'CL=F',     st: ['cl.f'],            fred: 'DCOILWTICO',   name: 'Oil (WTI)',    group: 'COMMODITIES', fmt: 'usd' },
+  { id: 'brent',  y: 'BZ=F',     st: ['cb.f'],            fred: 'DCOILBRENTEU', name: 'Oil (Brent)',  group: 'COMMODITIES', fmt: 'usd' },
+  { id: 'natgas', y: 'NG=F',     st: ['ng.f'],            fred: 'DHHNGSP',      name: 'Nat Gas',      group: 'COMMODITIES', fmt: 'usd' },
+  { id: 'copper', y: 'HG=F',     st: ['hg.f'],            fred: 'PCOPPUSDM',    name: 'Copper',       group: 'COMMODITIES', fmt: 'usd' },
 ];
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -94,6 +98,31 @@ async function fredQuote(seriesId) {
   return { price: vals[vals.length - 1], prev: vals[vals.length - 2], source: 'fred' };
 }
 
+async function cgQuote(id) {
+  const url = `${CG_BASE}/simple/price?ids=${id}&vs_currencies=usd&include_24hr_change=true&${CG_KEY_PARAM}=${CG_API_KEY}`;
+  const res = await fetch(url, { headers: { Accept: 'application/json' }, timeout: 12000 });
+  if (!res.ok) throw new Error(`coingecko ${res.status}`);
+  const j = await res.json();
+  const d = j[id];
+  if (!d?.usd) throw new Error('coingecko empty');
+  const chg = d.usd_24h_change || 0;
+  return { price: d.usd, prev: d.usd / (1 + chg / 100), source: 'coingecko' };
+}
+
+async function frankfurterQuote(from, to) {
+  const since = new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10);
+  const url = `https://api.frankfurter.app/${since}..?from=${from}&to=${to}`;
+  const res = await fetch(url, { headers: { Accept: 'application/json' }, timeout: 12000 });
+  if (!res.ok) throw new Error(`frankfurter ${res.status}`);
+  const j = await res.json();
+  const dates = Object.keys(j.rates || {}).sort();
+  if (dates.length < 2) throw new Error('frankfurter empty');
+  const price = j.rates[dates[dates.length - 1]][to];
+  const prev = j.rates[dates[dates.length - 2]][to];
+  if (!price || !prev) throw new Error('frankfurter bad');
+  return { price, prev, source: 'ecb' };
+}
+
 async function fetchQuote(inst) {
   let q = null, lastErr = null;
   try { q = await yahooQuote(inst); } catch (e) { lastErr = e; }
@@ -101,6 +130,12 @@ async function fetchQuote(inst) {
     for (const sym of inst.st) {
       try { q = await stooqQuote(sym); break; } catch (e) { lastErr = e; }
     }
+  }
+  if (!q && inst.cg && CG_API_KEY) {
+    try { q = await cgQuote(inst.cg); } catch (e) { lastErr = e; }
+  }
+  if (!q && inst.ff) {
+    try { q = await frankfurterQuote(inst.ff[0], inst.ff[1]); } catch (e) { lastErr = e; }
   }
   if (!q && inst.fred) {
     try { q = await fredQuote(inst.fred); } catch (e) { lastErr = e; }
